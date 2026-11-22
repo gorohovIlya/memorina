@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -21,13 +22,35 @@ class MainActivity : AppCompatActivity() {
 
     private val openCards = mutableListOf<ImageView>()
     private var isChecking = false
+    private var gameFinished = false
+    private var matchedPairs = 0
+    private var flipBackRunnable: Runnable? = null
+    private lateinit var board: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val layout = LinearLayout(applicationContext).apply {
+        board = LinearLayout(applicationContext).apply {
             orientation = LinearLayout.VERTICAL
         }
+        setContentView(board)
+
+        startNewGame()
+    }
+
+    override fun onDestroy() {
+        flipBackRunnable?.let { board.removeCallbacks(it) }
+        super.onDestroy()
+    }
+
+    private fun startNewGame() {
+        flipBackRunnable?.let { board.removeCallbacks(it) }
+        flipBackRunnable = null
+        openCards.clear()
+        isChecking = false
+        gameFinished = false
+        matchedPairs = 0
+        board.removeAllViews()
 
         val rowParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
@@ -54,18 +77,16 @@ class MainActivity : AppCompatActivity() {
                     scaleType = ImageView.ScaleType.FIT_CENTER
                     layoutParams = cardParams
                     tag = faceResId
-                    setOnClickListener(colorListener)
+                    setOnClickListener(cardListener)
                 })
             }
-            layout.addView(row)
+            board.addView(row)
         }
-
-        setContentView(layout)
     }
 
-    private val colorListener = View.OnClickListener { clicked ->
+    private val cardListener = View.OnClickListener { clicked ->
         val view = clicked as ImageView
-        if (isChecking || openCards.size == 2) return@OnClickListener
+        if (isChecking || gameFinished || openCards.size == 2) return@OnClickListener
 
         view.setImageResource(view.tag as Int)
         view.isClickable = false
@@ -77,19 +98,42 @@ class MainActivity : AppCompatActivity() {
             val second = openCards[1]
 
             if (first.tag == second.tag) {
+                first.visibility = View.INVISIBLE
+                second.visibility = View.INVISIBLE
                 openCards.clear()
                 isChecking = false
+                matchedPairs++
+
+                if (matchedPairs == faceImages.size) {
+                    gameFinished = true
+                    showWinDialog()
+                }
             } else {
-                first.postDelayed({
+                val flipBack = Runnable {
                     first.setImageResource(R.drawable.cover)
                     second.setImageResource(R.drawable.cover)
                     first.isClickable = true
                     second.isClickable = true
                     openCards.clear()
                     isChecking = false
-                }, FLIP_DELAY_MS)
+                    flipBackRunnable = null
+                }
+                flipBackRunnable = flipBack
+                board.postDelayed(flipBack, FLIP_DELAY_MS)
             }
         }
+    }
+
+    private fun showWinDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.win_title)
+            .setMessage(R.string.win_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.play_again) { dialog, _ ->
+                dialog.dismiss()
+                startNewGame()
+            }
+            .show()
     }
 
     companion object {
